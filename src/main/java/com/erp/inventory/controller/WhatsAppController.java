@@ -3,13 +3,11 @@ package com.erp.inventory.controller;
 import com.erp.inventory.dto.WhatsAppMessageRequest;
 import com.erp.inventory.entity.Product;
 import com.erp.inventory.entity.StockChangeLog;
+import com.erp.inventory.security.JwtRequestContext;
 import com.erp.inventory.service.ProductService;
 import com.erp.inventory.service.StockChangeLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -22,21 +20,14 @@ import java.util.Optional;
 public class WhatsAppController {
     private final ProductService productService;
     private final StockChangeLogService stockChangeLogService;
+    private final JwtRequestContext jwtContext;
 
     @PostMapping
     public ResponseEntity<?> handleMessage(@RequestBody WhatsAppMessageRequest request) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()
-                || authentication.getPrincipal().equals("anonymousUser")) {
+        String userId = jwtContext.getUserEmail();
+        if (userId == null) {
             return ResponseEntity.status(401).body("Unauthorized");
         }
-        String userId = null;
-        if (authentication.getPrincipal() instanceof UserDetails) {
-            userId = ((UserDetails) authentication.getPrincipal()).getUsername(); // email
-        } else if (authentication.getPrincipal() instanceof String) {
-            userId = authentication.getPrincipal().toString();
-        }
-        // Пример строки: "Краска Белая -1"
         String text = request.getText();
         if (text == null || text.trim().isEmpty()) {
             return ResponseEntity.badRequest().body("Text is required");
@@ -53,7 +44,7 @@ public class WhatsAppController {
             return ResponseEntity.badRequest().body("Invalid amount");
         }
         String productName = String.join(" ", java.util.Arrays.copyOf(parts, parts.length - 1));
-        Optional<Product> productOpt = productService.findAll().stream()
+        Optional<Product> productOpt = productService.findAll(jwtContext.getCompanyId()).stream()
                 .filter(p -> {
                     Object nameObj = p.getData() != null ? p.getData().get("name") : null;
                     return nameObj != null && nameObj.toString().equalsIgnoreCase(productName);
@@ -74,7 +65,7 @@ public class WhatsAppController {
         }
         data.put("stock", newStock);
         product.setData(data);
-        productService.save(product);
+        productService.save(product, jwtContext.getCompanyId());
         StockChangeLog log = StockChangeLog.builder()
                 .productId(product.getId())
                 .userId(userId)
@@ -83,7 +74,7 @@ public class WhatsAppController {
                 .comment("WhatsApp update: " + text)
                 .timestamp(LocalDateTime.now())
                 .build();
-        stockChangeLogService.save(log);
+        stockChangeLogService.save(log, jwtContext.getCompanyId());
         return ResponseEntity.ok("Stock updated for product: " + productName + ", new stock: " + newStock);
     }
 }

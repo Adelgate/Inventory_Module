@@ -2,7 +2,7 @@ package com.erp.inventory.controller;
 
 import com.erp.inventory.dto.UserRequest;
 import com.erp.inventory.dto.UserResponse;
-import com.erp.inventory.security.JwtUtil;
+import com.erp.inventory.security.JwtRequestContext;
 import com.erp.inventory.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,64 +18,49 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
-    private final JwtUtil jwtUtil;
-
-    private String getCurrentCompanyId(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            return jwtUtil.extractCompanyId(token);
-        }
-        return null;
-    }
-
-    private String getCurrentUserRole(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            return jwtUtil.extractUserRole(token);
-        }
-        return null;
-    }
+    private final JwtRequestContext jwtContext;
 
     @GetMapping
-    public List<UserResponse> getAll(HttpServletRequest request) {
-        return userService.findAll(getCurrentCompanyId(request));
+    public List<UserResponse> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String fullName) {
+        return userService.findAll(jwtContext.getCompanyId(), page, size, email, fullName);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getById(@PathVariable String id, HttpServletRequest request) {
-        return userService.findById(id, getCurrentCompanyId(request))
+    public ResponseEntity<UserResponse> getById(@PathVariable String id) {
+        return userService.findById(id, jwtContext.getCompanyId())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ResponseEntity<UserResponse> create(@Valid @RequestBody UserRequest req, HttpServletRequest request) {
-        if (!"ADMIN".equals(getCurrentUserRole(request))) {
+    public ResponseEntity<UserResponse> create(@Valid @RequestBody UserRequest req) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
             return ResponseEntity.status(403).build();
         }
-        UserResponse saved = userService.create(req, getCurrentCompanyId(request));
+        UserResponse saved = userService.create(req, jwtContext.getCompanyId());
         return ResponseEntity.created(URI.create("/api/users/" + saved.getId())).body(saved);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<UserResponse> update(@PathVariable String id, @Valid @RequestBody UserRequest req,
-            HttpServletRequest request) {
-        if (!"ADMIN".equals(getCurrentUserRole(request))) {
+    public ResponseEntity<UserResponse> update(@PathVariable String id, @Valid @RequestBody UserRequest req) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
             return ResponseEntity.status(403).build();
         }
-        return userService.update(id, req, getCurrentCompanyId(request))
+        return userService.update(id, req, jwtContext.getCompanyId())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id, HttpServletRequest request) {
-        if (!"ADMIN".equals(getCurrentUserRole(request))) {
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
             return ResponseEntity.status(403).build();
         }
-        if (!userService.deleteById(id, getCurrentCompanyId(request))) {
+        if (!userService.deleteById(id, jwtContext.getCompanyId())) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.noContent().build();

@@ -7,6 +7,8 @@ import com.erp.inventory.entity.UserRole;
 import com.erp.inventory.mapper.UserMapper;
 import com.erp.inventory.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -21,9 +23,14 @@ public class UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
 
-    public List<UserResponse> findAll(String currentCompanyId) {
+    public List<UserResponse> findAll(String currentCompanyId, int page, int size, String email, String fullName) {
+        Pageable pageable = PageRequest.of(page, size);
         return userRepository.findAll().stream()
                 .filter(u -> u.getCompanyId().equals(currentCompanyId))
+                .filter(u -> email == null || u.getEmail().toLowerCase().contains(email.toLowerCase()))
+                .filter(u -> fullName == null || u.getFullName().toLowerCase().contains(fullName.toLowerCase()))
+                .skip((long) page * size)
+                .limit(size)
                 .map(userMapper::toResponse)
                 .collect(Collectors.toList());
     }

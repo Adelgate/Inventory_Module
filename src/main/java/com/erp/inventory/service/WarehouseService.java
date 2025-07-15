@@ -14,9 +14,12 @@ import java.util.stream.Collectors;
 public class WarehouseService {
     private final WarehouseRepository warehouseRepository;
 
-    public List<Warehouse> findAll(String currentCompanyId) {
+    public List<Warehouse> findAll(String currentCompanyId, int page, int size, String address) {
         return warehouseRepository.findAll().stream()
                 .filter(w -> w.getCompanyId().equals(currentCompanyId))
+                .filter(w -> address == null || w.getAddress().toLowerCase().contains(address.toLowerCase()))
+                .skip((long) page * size)
+                .limit(size)
                 .collect(Collectors.toList());
     }
 

@@ -14,9 +14,13 @@ import java.util.stream.Collectors;
 public class ProductService {
     private final ProductRepository productRepository;
 
-    public List<Product> findAll(String currentCompanyId) {
+    public List<Product> findAll(String currentCompanyId, int page, int size, String name) {
         return productRepository.findAll().stream()
                 .filter(p -> p.getCompanyId().equals(currentCompanyId))
+                .filter(p -> name == null || (p.getData() != null && p.getData().get("name") != null
+                        && p.getData().get("name").toString().toLowerCase().contains(name.toLowerCase())))
+                .skip((long) page * size)
+                .limit(size)
                 .collect(Collectors.toList());
     }
 

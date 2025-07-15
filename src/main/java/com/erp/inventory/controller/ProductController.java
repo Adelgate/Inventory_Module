@@ -1,13 +1,12 @@
 package com.erp.inventory.controller;
 
 import com.erp.inventory.entity.Product;
-import com.erp.inventory.security.JwtUtil;
+import com.erp.inventory.security.JwtRequestContext;
 import com.erp.inventory.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.List;
 
@@ -16,46 +15,48 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProductController {
     private final ProductService productService;
-    private final JwtUtil jwtUtil;
-
-    private String getCurrentCompanyId(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            return jwtUtil.extractCompanyId(token);
-        }
-        return null;
-    }
+    private final JwtRequestContext jwtContext;
 
     @GetMapping
-    public List<Product> getAll(HttpServletRequest request) {
-        return productService.findAll(getCurrentCompanyId(request));
+    public List<Product> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String name) {
+        return productService.findAll(jwtContext.getCompanyId(), page, size, name);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Product> getById(@PathVariable String id, HttpServletRequest request) {
-        return productService.findById(id, getCurrentCompanyId(request))
+    public ResponseEntity<Product> getById(@PathVariable String id) {
+        return productService.findById(id, jwtContext.getCompanyId())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ResponseEntity<Product> create(@RequestBody Product product, HttpServletRequest request) {
-        Product saved = productService.save(product, getCurrentCompanyId(request));
+    public ResponseEntity<Product> create(@RequestBody Product product) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
+            return ResponseEntity.status(403).build();
+        }
+        Product saved = productService.save(product, jwtContext.getCompanyId());
         return ResponseEntity.created(URI.create("/api/products/" + saved.getId())).body(saved);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Product> update(@PathVariable String id, @RequestBody Product product,
-            HttpServletRequest request) {
+    public ResponseEntity<Product> update(@PathVariable String id, @RequestBody Product product) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
+            return ResponseEntity.status(403).build();
+        }
         product.setId(id);
-        Product saved = productService.save(product, getCurrentCompanyId(request));
+        Product saved = productService.save(product, jwtContext.getCompanyId());
         return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id, HttpServletRequest request) {
-        if (!productService.deleteById(id, getCurrentCompanyId(request))) {
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
+            return ResponseEntity.status(403).build();
+        }
+        if (!productService.deleteById(id, jwtContext.getCompanyId())) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.noContent().build();

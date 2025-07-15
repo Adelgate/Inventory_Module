@@ -1,7 +1,7 @@
 package com.erp.inventory.controller;
 
 import com.erp.inventory.entity.Warehouse;
-import com.erp.inventory.security.JwtUtil;
+import com.erp.inventory.security.JwtRequestContext;
 import com.erp.inventory.service.WarehouseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,46 +16,48 @@ import java.util.List;
 @RequiredArgsConstructor
 public class WarehouseController {
     private final WarehouseService warehouseService;
-    private final JwtUtil jwtUtil;
-
-    private String getCurrentCompanyId(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            return jwtUtil.extractCompanyId(token);
-        }
-        return null;
-    }
+    private final JwtRequestContext jwtContext;
 
     @GetMapping
-    public List<Warehouse> getAll(HttpServletRequest request) {
-        return warehouseService.findAll(getCurrentCompanyId(request));
+    public List<Warehouse> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String address) {
+        return warehouseService.findAll(jwtContext.getCompanyId(), page, size, address);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Warehouse> getById(@PathVariable String id, HttpServletRequest request) {
-        return warehouseService.findById(id, getCurrentCompanyId(request))
+    public ResponseEntity<Warehouse> getById(@PathVariable String id) {
+        return warehouseService.findById(id, jwtContext.getCompanyId())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ResponseEntity<Warehouse> create(@RequestBody Warehouse warehouse, HttpServletRequest request) {
-        Warehouse saved = warehouseService.save(warehouse, getCurrentCompanyId(request));
+    public ResponseEntity<Warehouse> create(@RequestBody Warehouse warehouse) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
+            return ResponseEntity.status(403).build();
+        }
+        Warehouse saved = warehouseService.save(warehouse, jwtContext.getCompanyId());
         return ResponseEntity.created(URI.create("/api/warehouses/" + saved.getId())).body(saved);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Warehouse> update(@PathVariable String id, @RequestBody Warehouse warehouse,
-            HttpServletRequest request) {
+    public ResponseEntity<Warehouse> update(@PathVariable String id, @RequestBody Warehouse warehouse) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
+            return ResponseEntity.status(403).build();
+        }
         warehouse.setId(id);
-        Warehouse saved = warehouseService.save(warehouse, getCurrentCompanyId(request));
+        Warehouse saved = warehouseService.save(warehouse, jwtContext.getCompanyId());
         return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id, HttpServletRequest request) {
-        if (!warehouseService.deleteById(id, getCurrentCompanyId(request))) {
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
+            return ResponseEntity.status(403).build();
+        }
+        if (!warehouseService.deleteById(id, jwtContext.getCompanyId())) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.noContent().build();

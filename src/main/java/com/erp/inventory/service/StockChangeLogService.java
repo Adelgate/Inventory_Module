@@ -17,12 +17,15 @@ public class StockChangeLogService {
     private final StockChangeLogRepository stockChangeLogRepository;
     private final ProductRepository productRepository;
 
-    public List<StockChangeLog> findAll(String currentCompanyId) {
+    public List<StockChangeLog> findAll(String currentCompanyId, int page, int size, String productId) {
         return stockChangeLogRepository.findAll().stream()
                 .filter(log -> {
                     Optional<Product> productOpt = productRepository.findById(log.getProductId());
                     return productOpt.isPresent() && productOpt.get().getCompanyId().equals(currentCompanyId);
                 })
+                .filter(log -> productId == null || log.getProductId().equals(productId))
+                .skip((long) page * size)
+                .limit(size)
                 .collect(Collectors.toList());
     }
 

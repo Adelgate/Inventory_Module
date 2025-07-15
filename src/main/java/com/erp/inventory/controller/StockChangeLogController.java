@@ -1,13 +1,12 @@
 package com.erp.inventory.controller;
 
 import com.erp.inventory.entity.StockChangeLog;
-import com.erp.inventory.security.JwtUtil;
+import com.erp.inventory.security.JwtRequestContext;
 import com.erp.inventory.service.StockChangeLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.List;
 
@@ -16,32 +15,26 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StockChangeLogController {
     private final StockChangeLogService stockChangeLogService;
-    private final JwtUtil jwtUtil;
-
-    private String getCurrentCompanyId(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            return jwtUtil.extractCompanyId(token);
-        }
-        return null;
-    }
+    private final JwtRequestContext jwtContext;
 
     @GetMapping
-    public List<StockChangeLog> getAll(HttpServletRequest request) {
-        return stockChangeLogService.findAll(getCurrentCompanyId(request));
+    public List<StockChangeLog> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String productId) {
+        return stockChangeLogService.findAll(jwtContext.getCompanyId(), page, size, productId);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<StockChangeLog> getById(@PathVariable String id, HttpServletRequest request) {
-        return stockChangeLogService.findById(id, getCurrentCompanyId(request))
+    public ResponseEntity<StockChangeLog> getById(@PathVariable String id) {
+        return stockChangeLogService.findById(id, jwtContext.getCompanyId())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ResponseEntity<StockChangeLog> create(@RequestBody StockChangeLog log, HttpServletRequest request) {
-        StockChangeLog saved = stockChangeLogService.save(log, getCurrentCompanyId(request));
+    public ResponseEntity<StockChangeLog> create(@RequestBody StockChangeLog log) {
+        StockChangeLog saved = stockChangeLogService.save(log, jwtContext.getCompanyId());
         return ResponseEntity.created(URI.create("/api/stock-change-logs/" + saved.getId())).body(saved);
     }
 
@@ -55,8 +48,11 @@ public class StockChangeLogController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id, HttpServletRequest request) {
-        if (!stockChangeLogService.deleteById(id, getCurrentCompanyId(request))) {
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        if (!"ADMIN".equals(jwtContext.getUserRole())) {
+            return ResponseEntity.status(403).build();
+        }
+        if (!stockChangeLogService.deleteById(id, jwtContext.getCompanyId())) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.noContent().build();
